@@ -6,6 +6,8 @@ export const createPartySchema = z.object({
   email: z.string().email("Invalid email address").optional().nullable().or(z.literal("")),
   address: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  creditLimit: z.number().min(0).default(0),
+  creditTermsDays: z.number().int().min(0).default(0),
 });
 
 export const updatePartySchema = createPartySchema.partial();
@@ -17,6 +19,7 @@ export const recordCustomerPaymentSchema = z.object({
   referenceType: z.string().max(50).default("customer_debt_repayment"),
   externalReference: z.string().max(150).optional(),
   description: z.string().optional(),
+  proofUrl: z.string().optional().nullable(),
 });
 
 export const purchaseItemInputSchema = z.object({

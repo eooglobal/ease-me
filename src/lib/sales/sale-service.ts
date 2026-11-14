@@ -37,6 +37,27 @@ export class SaleService {
 
     return withIdempotency(ctx.businessId, validated.idempotencyKey, async () => {
       return db.transaction(async (tx) => {
+        // Check database for existing sale with this idempotencyKey
+        if (validated.idempotencyKey) {
+          const [existingSale] = await tx
+            .select()
+            .from(sales)
+            .where(
+              and(
+                eq(sales.businessId, ctx.businessId),
+                eq(sales.idempotencyKey, validated.idempotencyKey)
+              )
+            );
+          if (existingSale) {
+            return {
+              sale: existingSale,
+              items: [],
+              payments: [],
+              isIdempotentReplay: true,
+            };
+          }
+        }
+
         // 1. Fetch products being sold and lock/verify stock
         const productIds = validated.items.map((i) => i.productId);
         const fetchedProducts = await tx
@@ -153,6 +174,7 @@ export class SaleService {
             tax: overallTax.toString(),
             total: finalTotal.toString(),
             paymentStatus,
+            idempotencyKey: validated.idempotencyKey || null,
             soldBy: ctx.userId,
           })
           .returning();

@@ -45,6 +45,23 @@ export class InventoryMovementService {
         throw new ValidationError("Operation would result in negative stock balance for this product.");
       }
 
+      // Calculate Weighted Average Cost (WAC) ONLY on purchase intake ("received")
+      let updatedCostPrice = product.costPrice;
+      if (validated.movementType === "received" && validated.quantity > 0 && validated.unitCost !== undefined) {
+        const intakeUnitCost = Number(validated.unitCost);
+        const currentWac = Number(product.costPrice) || 0;
+        const currentQty = Math.max(0, previousStock);
+        const incomingQty = validated.quantity;
+        const totalNewQty = currentQty + incomingQty;
+
+        if (totalNewQty > 0) {
+          const totalValuation = (currentQty * currentWac) + (incomingQty * intakeUnitCost);
+          // Rounding is applied once, at the end, to 2 decimal places
+          const calculatedWac = Math.round((totalValuation / totalNewQty) * 100) / 100;
+          updatedCostPrice = calculatedWac.toFixed(2);
+        }
+      }
+
       // 2. Insert into immutable movement ledger
       const [movement] = await tx
         .insert(inventoryMovements)
@@ -61,28 +78,31 @@ export class InventoryMovementService {
         })
         .returning();
 
-      // 3. Atomically update cached currentStock counter
+      // 3. Atomically update cached currentStock counter and WAC costPrice (if intake)
       await tx
         .update(products)
         .set({
           currentStock: newStock,
+          costPrice: updatedCostPrice,
           updatedAt: new Date(),
         })
         .where(eq(products.id, product.id));
 
-      // 4. Create immutable audit log entry
+      // 4. Create immutable audit log entry (escalate theft / shrinkage to security audit)
+      const isTheft = validated.movementType === "missing" || (validated.reason && validated.reason.toLowerCase().includes("theft"));
       await tx.insert(auditLogs).values({
         businessId: ctx.businessId,
         userId: ctx.userId,
-        action: `INVENTORY_${validated.movementType.toUpperCase()}`,
-        entityType: "product",
+        action: isTheft ? "SECURITY_THEFT_SHRINKAGE" : `INVENTORY_${validated.movementType.toUpperCase()}`,
+        entityType: isTheft ? "SECURITY" : "product",
         entityId: product.id,
-        oldValues: { stock: previousStock },
-        newValues: { stock: newStock, quantityChanged: validated.quantity },
+        oldValues: { stock: previousStock, costPrice: product.costPrice },
+        newValues: { stock: newStock, costPrice: updatedCostPrice, quantityChanged: validated.quantity },
         metadata: {
           movementId: movement.id,
           reason: validated.reason,
           referenceType: validated.referenceType,
+          isTheftAlert: isTheft,
         },
       });
 
@@ -103,6 +123,7 @@ export class InventoryMovementService {
         movement,
         previousStock,
         newStock,
+        costPrice: updatedCostPrice,
       };
     });
   }

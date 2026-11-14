@@ -22,6 +22,8 @@ export class CustomerService {
         address: customers.address,
         notes: customers.notes,
         status: customers.status,
+        creditLimit: customers.creditLimit,
+        creditTermsDays: customers.creditTermsDays,
         totalDebit: sql<string>`COALESCE(SUM(${customerTransactions.debit}), 0)`,
         totalCredit: sql<string>`COALESCE(SUM(${customerTransactions.credit}), 0)`,
         currentBalance: sql<string>`COALESCE(SUM(${customerTransactions.debit}), 0) - COALESCE(SUM(${customerTransactions.credit}), 0)`,
@@ -45,6 +47,8 @@ export class CustomerService {
         address: customers.address,
         notes: customers.notes,
         status: customers.status,
+        creditLimit: customers.creditLimit,
+        creditTermsDays: customers.creditTermsDays,
         totalDebit: sql<string>`COALESCE(SUM(${customerTransactions.debit}), 0)`,
         totalCredit: sql<string>`COALESCE(SUM(${customerTransactions.credit}), 0)`,
         currentBalance: sql<string>`COALESCE(SUM(${customerTransactions.debit}), 0) - COALESCE(SUM(${customerTransactions.credit}), 0)`,
@@ -80,6 +84,8 @@ export class CustomerService {
         address: validated.address,
         notes: validated.notes,
         status: "active",
+        creditLimit: (validated.creditLimit || 0).toFixed(2),
+        creditTermsDays: validated.creditTermsDays || 0,
       })
       .returning();
 
@@ -90,12 +96,18 @@ export class CustomerService {
     requirePermission(ctx, "customers.manage");
     const validated = updatePartySchema.parse(input);
 
+    const updatePayload: Record<string, any> = {
+      ...validated,
+      updatedAt: new Date(),
+    };
+
+    if (validated.creditLimit !== undefined) {
+      updatePayload.creditLimit = validated.creditLimit.toFixed(2);
+    }
+
     const [updated] = await db
       .update(customers)
-      .set({
-        ...validated,
-        updatedAt: new Date(),
-      })
+      .set(updatePayload)
       .where(
         and(
           eq(customers.id, customerId),
@@ -161,6 +173,7 @@ export class CustomerService {
           referenceId: paymentRecord.id,
           debit: "0",
           credit: validated.amount.toString(),
+          proofUrl: validated.proofUrl || null,
           description: validated.description || `Debt repayment by ${customer.name}`,
           createdBy: ctx.userId,
         })

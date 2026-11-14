@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: easeme-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ease_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d ease_me"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - easeme-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: easeme-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - easeme-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  easeme-network:
+    driver: bridge
+

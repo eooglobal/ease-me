@@ -1,60 +1,21 @@
 import { db } from "@/db";
-import { subscriptions, plans, planFeatures, businessMembers } from "@/db/schema";
+import { subscriptions, plans, planFeatures, businessMembers, products } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { ForbiddenError } from "@/lib/security/errors";
 
-export const FEATURE_KEYS = {
-  MULTI_USER: "multi_user",
-  ADVANCED_REPORTS: "advanced_reports",
-  PROFIT_AND_LOSS: "profit_and_loss",
-  DAILY_RECONCILIATION: "daily_reconciliation",
-  SUPPLIER_MANAGEMENT: "supplier_management",
-  INVENTORY_AUDIT_LOGS: "inventory_audit_logs",
-  UNLIMITED_PRODUCTS: "unlimited_products",
-  DATA_EXPORT: "data_export",
-} as const;
-
-export type FeatureKey = (typeof FEATURE_KEYS)[keyof typeof FEATURE_KEYS];
-
-export const DEFAULT_PLAN_CONFIGS = {
-  free: {
-    name: "Free Plan",
-    price: 0,
-    features: {
-      [FEATURE_KEYS.MULTI_USER]: 1, // Max 1 user
-      [FEATURE_KEYS.ADVANCED_REPORTS]: 0, // Disabled
-      [FEATURE_KEYS.PROFIT_AND_LOSS]: 0, // Disabled
-      [FEATURE_KEYS.DAILY_RECONCILIATION]: 0, // Disabled
-      [FEATURE_KEYS.SUPPLIER_MANAGEMENT]: 0, // Disabled
-      [FEATURE_KEYS.INVENTORY_AUDIT_LOGS]: 0, // Disabled
-      [FEATURE_KEYS.UNLIMITED_PRODUCTS]: 50, // Max 50 products
-      [FEATURE_KEYS.DATA_EXPORT]: 0, // Disabled
-    },
-  },
-  pro: {
-    name: "Pro Plan",
-    price: 15000, // ₦15,000 / month
-    features: {
-      [FEATURE_KEYS.MULTI_USER]: 10, // Up to 10 staff members
-      [FEATURE_KEYS.ADVANCED_REPORTS]: 1, // Enabled
-      [FEATURE_KEYS.PROFIT_AND_LOSS]: 1, // Enabled
-      [FEATURE_KEYS.DAILY_RECONCILIATION]: 1, // Enabled
-      [FEATURE_KEYS.SUPPLIER_MANAGEMENT]: 1, // Enabled
-      [FEATURE_KEYS.INVENTORY_AUDIT_LOGS]: 1, // Enabled
-      [FEATURE_KEYS.UNLIMITED_PRODUCTS]: 10000, // Unlimited
-      [FEATURE_KEYS.DATA_EXPORT]: 1, // Enabled
-    },
-  },
-};
+export * from "./pricing-plans";
+import { FEATURE_KEYS, PRICING_TIERS, FeatureKey } from "./pricing-plans";
 
 export class EntitlementService {
   /**
    * Retrieves active plan and feature entitlements for a business
    */
   static async getBusinessPlan(businessId: string): Promise<{
+    planId: string;
     planName: string;
-    isPro: boolean;
+    isPaid: boolean;
     status: string;
+    currentPeriodEnd?: Date | null;
     limits: Record<string, number>;
   }> {
     const [sub] = await db
@@ -75,21 +36,30 @@ export class EntitlementService {
       .limit(1);
 
     if (!sub) {
-      // Default to Free plan
       return {
-        planName: "Free",
-        isPro: false,
+        planId: "starter",
+        planName: "Starter (Freemium)",
+        isPaid: false,
         status: "active",
-        limits: DEFAULT_PLAN_CONFIGS.free.features,
+        limits: PRICING_TIERS.starter.features,
       };
     }
 
-    const isPro = sub.planName.toLowerCase().includes("pro");
+    const lowerName = sub.planName.toLowerCase();
+    const isPaid = !lowerName.includes("free") && !lowerName.includes("starter");
+
+    let matchedTier = PRICING_TIERS.starter;
+    if (lowerName.includes("growth") || lowerName.includes("pro")) matchedTier = PRICING_TIERS.growth;
+    else if (lowerName.includes("business")) matchedTier = PRICING_TIERS.business;
+    else if (lowerName.includes("enterprise")) matchedTier = PRICING_TIERS.enterprise;
+
     return {
+      planId: matchedTier.id,
       planName: sub.planName,
-      isPro,
+      isPaid,
       status: sub.status,
-      limits: isPro ? DEFAULT_PLAN_CONFIGS.pro.features : DEFAULT_PLAN_CONFIGS.free.features,
+      currentPeriodEnd: sub.currentPeriodEnd,
+      limits: matchedTier.features,
     };
   }
 
@@ -99,8 +69,6 @@ export class EntitlementService {
   static async checkFeatureEntitlement(businessId: string, featureKey: FeatureKey): Promise<boolean> {
     const plan = await this.getBusinessPlan(businessId);
     const limit = plan.limits[featureKey];
-
-    // Boolean features: 1 = enabled, 0 = disabled
     return limit !== undefined && limit > 0;
   }
 
@@ -111,7 +79,7 @@ export class EntitlementService {
     const allowed = await this.checkFeatureEntitlement(businessId, featureKey);
     if (!allowed) {
       throw new ForbiddenError(
-        `Your current subscription plan does not include '${featureKey}'. Please upgrade to Pro to unlock this feature.`
+        `Your current plan does not include '${featureKey}'. Please upgrade to Growth or Business to unlock this capability.`
       );
     }
   }
@@ -119,7 +87,7 @@ export class EntitlementService {
   /**
    * Checks if staff member quota is exceeded for the business
    */
-  static async checkUserSeatQuota(businessId: string): Promise<boolean> {
+  static async checkUserSeatQuota(businessId: string): Promise<{ allowed: boolean; used: number; max: number }> {
     const plan = await this.getBusinessPlan(businessId);
     const maxSeats = plan.limits[FEATURE_KEYS.MULTI_USER] || 1;
 
@@ -134,6 +102,30 @@ export class EntitlementService {
       );
 
     const activeMembers = Number(memberCountRes?.count || 0);
-    return activeMembers < maxSeats;
+    return {
+      allowed: activeMembers < maxSeats,
+      used: activeMembers,
+      max: maxSeats,
+    };
+  }
+
+  /**
+   * Checks if product catalog quota is exceeded for the business
+   */
+  static async checkProductQuota(businessId: string): Promise<{ allowed: boolean; used: number; max: number }> {
+    const plan = await this.getBusinessPlan(businessId);
+    const maxProducts = plan.limits[FEATURE_KEYS.UNLIMITED_PRODUCTS] || 50;
+
+    const [productCountRes] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(products)
+      .where(eq(products.businessId, businessId));
+
+    const totalProducts = Number(productCountRes?.count || 0);
+    return {
+      allowed: totalProducts < maxProducts,
+      used: totalProducts,
+      max: maxProducts,
+    };
   }
 }

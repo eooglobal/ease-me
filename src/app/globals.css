@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-brand-800: #9a3412;
+  --color-brand-900: #7c2d12;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Enforce Inter sitewide with compact, balanced accounting line-height */
+html, body, button, input, select, textarea, table, th, td {
+  font-family: var(--font-sans) !important;
 }
 
 body {
-  background: var(--background);
+  background-color: #f8fafc;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Crisp Industrial Ledger card surface - Solid, subtle borders, zero blur slop */
+.ledger-card, .glass-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem; /* 8px */
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.ledger-card-hover, .glass-card-hover {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.ledger-card-hover:hover, .glass-card-hover:hover {
+  border-color: #cbd5e1;
+  background-color: #ffffff;
+}
+
+/* Tabular Financial Numbers - Strict monospace & tabular alignment */
+.tabular-nums, .financial-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv05" 1;
+  letter-spacing: -0.015em;
+}
+
+.num-mono {
+  font-family: var(--font-mono) !important;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.02em;
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ==========================================================================
+   Thermal POS Receipt Printing Media Queries (80mm / 58mm)
+   ========================================================================== */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide entire page layout during print */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Make only the thermal receipt element and its descendants visible */
+  #thermal-receipt-printable,
+  #thermal-receipt-printable * {
+    visibility: visible !important;
+  }
+
+  #thermal-receipt-printable {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 4mm 6mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  @page {
+    size: 80mm auto;
+    margin: 0mm;
+  }
 }

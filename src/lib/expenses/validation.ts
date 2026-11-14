@@ -14,6 +14,7 @@ export const createExpenseSchema = z.object({
   paymentMethod: z.enum(["cash", "bank_transfer", "card", "other"]).default("cash"),
   expenseDate: z.string().datetime().optional().or(z.date().optional()),
   requiresApproval: z.boolean().default(false),
+  receiptUrl: z.string().optional().nullable(),
 });
 
 export const updateExpenseSchema = createExpenseSchema.partial();

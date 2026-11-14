@@ -69,6 +69,7 @@ export class ExpenseService {
         createdBy: expenses.createdBy,
         approvedBy: expenses.approvedBy,
         approvedAt: expenses.approvedAt,
+        receiptUrl: expenses.receiptUrl,
         createdAt: expenses.createdAt,
       })
       .from(expenses)
@@ -134,6 +135,7 @@ export class ExpenseService {
           createdBy: ctx.userId,
           approvedBy,
           approvedAt,
+          receiptUrl: validated.receiptUrl || null,
         })
         .returning();
 
