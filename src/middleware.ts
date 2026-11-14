@@ -5,6 +5,7 @@ import { PlatformSettingsService } from "@/lib/superadmin/platform-config-servic
 
 // Define public route prefixes that do not require authentication
 const PUBLIC_PATHS = [
+  "/",
   "/login",
   "/signup",
   "/onboarding",
